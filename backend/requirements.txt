@@ -6,3 +6,6 @@ cryptography>=43,<44
 pydantic>=2.9,<2.10
 pydantic-settings>=2.6,<2.7
 PyYAML==6.0.3
+
+# Database driver for PostgreSQL (use DATABASE_URL=postgresql+psycopg://...)
+psycopg[binary]>=3.2,<3.3
