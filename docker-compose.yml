@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    container_name: branchstack-backend
+    environment:
+      BRANCHSTACK_SECRET_KEY: ${BRANCHSTACK_SECRET_KEY:-change-me-please}
+      BRANCHSTACK_DATABASE_URL: sqlite:////app/data/branchstack.db
+      BRANCHSTACK_CORS_ORIGINS: ${BRANCHSTACK_CORS_ORIGINS:-http://localhost:${BRANCHSTACK_FRONTEND_PORT:-8080}}
+    volumes:
+      - branchstack-data:/app/data
+    ports:
+      - "${BRANCHSTACK_BACKEND_PORT:-8000}:8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: branchstack-frontend
+    depends_on:
+      - backend
+    ports:
+      - "${BRANCHSTACK_FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  branchstack-data:
