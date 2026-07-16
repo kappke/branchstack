@@ -100,6 +100,13 @@ Docker-only (host port mapping, set in `.env`, see `docker-compose.yml`):
 | `BRANCHSTACK_BACKEND_PORT` | `8000` | Host port for the FastAPI backend |
 | `BRANCHSTACK_FRONTEND_PORT` | `8080` | Host port for the nginx-served frontend |
 
+Frontend (Vite, **build-time** — bake into the image, e.g. via Nixpacks/Dokploy env):
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VITE_API_URL` | `/api` | Absolute/relative backend API base the browser calls directly. Set to your deployed backend URL (e.g. `https://api.branchstack.example/api`) when frontend and backend run on separate origins. When unset, falls back to `/api` (same-origin via the nginx proxy or Vite dev proxy). |
+| `BRANCHSTACK_BACKEND` | `http://localhost:8000` | Dev-only: Vite dev server proxy target for `/api`. Not used in production builds. |
+
 ## API
 
 ```

@@ -11,7 +11,8 @@ export function setSessionToken(token) {
   else localStorage.removeItem(SESSION_KEY)
 }
 
-const http = axios.create({ baseURL: '/api' })
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
+const http = axios.create({ baseURL: API_BASE })
 
 http.interceptors.request.use((config) => {
   const token = getSessionToken()
