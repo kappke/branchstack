@@ -8,9 +8,9 @@ from ..models import User
 router = APIRouter(prefix="/api/repos", tags=["repos"])
 
 
-def _list_repos_cached(token_id: int, refresh: bool) -> list[dict]:
+def _list_repos_cached(token_id: int, organization, refresh: bool) -> list[dict]:
     cache = get_cache(token_id)
-    key = ("repos",)
+    key = ("repos", organization or "")
 
     def factory() -> list[dict]:
         client, _ = get_active_client(token_id=token_id)
@@ -19,6 +19,9 @@ def _list_repos_cached(token_id: int, refresh: bool) -> list[dict]:
                 repos = gh.list_repos()
         finally:
             client.close()
+        if organization:
+            org = organization.lower()
+            repos = [r for r in repos if str((r.get("owner") or {}).get("login", "")).lower() == org]
         return [
             {
                 "id": r["id"],
@@ -42,9 +45,9 @@ def _list_repos_cached(token_id: int, refresh: bool) -> list[dict]:
 
 @router.get("")
 def list_repos(refresh: bool = False, user: User = Depends(get_current_user)):
-    client, token = get_active_client(user_id=user.id)
+    client, token = get_active_client()
     try:
-        return _list_repos_cached(token.id, refresh)
+        return _list_repos_cached(token.id, token.organization, refresh)
     finally:
         client.close()
 
@@ -86,7 +89,7 @@ def _list_branches_cached(token_id: int, owner: str, repo: str, refresh: bool) -
 
 @router.get("/{owner}/{repo}/branches")
 def list_branches(owner: str, repo: str, refresh: bool = False, user: User = Depends(get_current_user)):
-    client, token = get_active_client(user_id=user.id)
+    client, token = get_active_client()
     try:
         return _list_branches_cached(token.id, owner, repo, refresh)
     finally:
@@ -122,7 +125,7 @@ def _list_workflows_cached(token_id: int, owner: str, repo: str, refresh: bool) 
 
 @router.get("/{owner}/{repo}/workflows")
 def list_workflows(owner: str, repo: str, refresh: bool = False, user: User = Depends(get_current_user)):
-    client, token = get_active_client(user_id=user.id)
+    client, token = get_active_client()
     try:
         return _list_workflows_cached(token.id, owner, repo, refresh)
     finally:
@@ -156,7 +159,7 @@ def _workflow_inputs_cached(token_id: int, owner: str, repo: str, workflow_path:
 @router.get("/{owner}/{repo}/workflows/{workflow_path:path}/inputs")
 def workflow_inputs(owner: str, repo: str, workflow_path: str, refresh: bool = False, user: User = Depends(get_current_user)):
     """workflow_path is the path within repo, e.g. .github/workflows/deploy.yml"""
-    client, token = get_active_client(user_id=user.id)
+    client, token = get_active_client()
     try:
         return _workflow_inputs_cached(token.id, owner, repo, workflow_path, refresh)
     finally:

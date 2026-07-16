@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..auth import get_current_user
-from ..cache import invalidate_token
+from ..auth import get_current_user, require_admin
+from ..cache import clear_all
 from ..config import encrypt_token
 from ..db import get_db
 from ..github import GitHubClient, GitHubError
@@ -12,22 +12,19 @@ from ..schemas import TokenCreate, TokenOut
 router = APIRouter(prefix="/api/tokens", tags=["tokens"])
 
 
-@router.get("", response_model=list[TokenOut])
+def _single(db: Session) -> GitToken | None:
+    return db.query(GitToken).order_by(GitToken.id.asc()).first()
+
+
+@router.get("", response_model=TokenOut | None)
 def list_tokens(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    return (
-        db.query(GitToken)
-        .filter(GitToken.user_id == user.id)
-        .order_by(GitToken.created_at.desc())
-        .all()
-    )
+    return _single(db)
 
 
 @router.post("", response_model=TokenOut)
-def add_token(payload: TokenCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    unique_name = f"{user.id}:{payload.name}"
-    if db.query(GitToken).filter(GitToken.name == unique_name).first():
-        raise HTTPException(status.HTTP_409_CONFLICT, "Token name already exists")
-    # validate + enrich by hitting /user
+def set_token(payload: TokenCreate, _: User = Depends(require_admin), db: Session = Depends(get_db)):
+    if not payload.token:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "token is required")
     try:
         with GitHubClient(payload.token) as gh:
             me = gh.whoami()
@@ -35,39 +32,36 @@ def add_token(payload: TokenCreate, user: User = Depends(get_current_user), db: 
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"GitHub rejected token: {e.message}")
     label = me.get("login") or payload.name
     scopes = me.get("scopes") or ""
+    organization = (payload.organization or "").strip() or None
     encrypted = encrypt_token(payload.token)
-    is_first = db.query(GitToken).filter(GitToken.user_id == user.id).count() == 0
-    token = GitToken(
-        user_id=user.id,
-        name=unique_name,
-        label=label,
-        encrypted_token=encrypted,
-        scopes=scopes,
-        is_active=is_first,  # first token auto-active
-    )
-    db.add(token)
+
+    existing = _single(db)
+    if existing:
+        existing.name = payload.name
+        existing.label = label
+        existing.organization = organization
+        existing.encrypted_token = encrypted
+        existing.scopes = scopes
+        token = existing
+    else:
+        token = GitToken(
+            name=payload.name,
+            label=label,
+            organization=organization,
+            encrypted_token=encrypted,
+            scopes=scopes,
+        )
+        db.add(token)
     db.commit()
     db.refresh(token)
+    clear_all()
     return token
 
 
-@router.post("/{token_id}/activate", response_model=TokenOut)
-def activate_token(token_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    token = db.get(GitToken, token_id)
-    if not token or token.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Token not found")
-    db.query(GitToken).filter(GitToken.user_id == user.id).update({GitToken.is_active: False})
-    token.is_active = True
-    db.commit()
-    db.refresh(token)
-    return token
-
-
-@router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_token(token_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    token = db.get(GitToken, token_id)
-    if not token or token.user_id != user.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Token not found")
-    db.delete(token)
-    db.commit()
-    invalidate_token(token_id)
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+def delete_token(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    token = _single(db)
+    if token:
+        db.delete(token)
+        db.commit()
+        clear_all()

@@ -28,31 +28,30 @@ def get_current_user(
     return user
 
 
-def get_active_client(
-    token_id: Optional[int] = None, user_id: Optional[int] = None
-) -> tuple[GitHubClient, GitToken]:
-    """Return a GitHubClient built from the active (or specified) stored token.
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin privileges required")
+    return user
 
-    If ``user_id`` is given the token lookup/ownership is constrained to that
-    user, so callers cannot escalate to another user's tokens.
+
+def get_active_client(
+    token_id: Optional[int] = None,
+) -> tuple[GitHubClient, GitToken]:
+    """Return a GitHubClient built from the single configured app token.
+
+    If ``token_id`` is given, that exact token is loaded (used when refreshing
+    the status of an older deployment that was dispatched with a now-replaced
+    token; 404s if the token no longer exists).
     """
     with get_db_session() as db:
         if token_id is not None:
             token = db.get(GitToken, token_id)
-            if not token or (user_id is not None and token.user_id != user_id):
+            if not token:
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Token not found")
         else:
-            q = db.query(GitToken).filter(GitToken.is_active.is_(True))
-            if user_id is not None:
-                q = q.filter(GitToken.user_id == user_id)
-            token = q.first()
+            token = db.query(GitToken).order_by(GitToken.id.asc()).first()
             if not token:
-                if user_id is not None:
-                    raise HTTPException(
-                        status.HTTP_400_BAD_REQUEST,
-                        "No active GitHub token configured for this user",
-                    )
-                raise HTTPException(status.HTTP_400_BAD_REQUEST, "No active GitHub token configured")
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "No GitHub token configured for the app")
         plaintext = decrypt_token(token.encrypted_token)
         client = GitHubClient(plaintext)
         return client, token

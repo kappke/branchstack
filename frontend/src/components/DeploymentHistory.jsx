@@ -63,7 +63,6 @@ export default function DeploymentHistory({ refreshKey }) {
                 <th className="py-1.5 pr-3 text-left">Branches</th>
                 <th className="py-1.5 pr-3 text-left">Temp</th>
                 <th className="py-1.5 pr-3 text-left">Workflow</th>
-                <th className="py-1.5 pr-3 text-left">Env</th>
                 <th className="py-1.5 pr-3 text-left">Status</th>
                 <th className="py-1.5 pr-3 text-left">Run</th>
                 <th className="py-1.5 text-left">When</th>
@@ -101,7 +100,6 @@ export default function DeploymentHistory({ refreshKey }) {
                         </details>
                       )}
                     </td>
-                    <td className="py-2 pr-3"><Badge color="indigo">{d.environment || '—'}</Badge></td>
                     <td className="py-2 pr-3">
                       <Badge color={statusColor(d.status)}>{d.status || 'queued'}</Badge>
                     </td>

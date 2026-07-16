@@ -2,22 +2,31 @@ import React, { useEffect, useState } from 'react'
 import { api, apiError } from '../api'
 import { Button, Card, Badge, Empty, ErrorBanner, Spinner } from './ui'
 
-export default function TokenManager({ onActiveChange }) {
-  const [tokens, setTokens] = useState([])
+export default function TokenManager({ user, onActiveChange }) {
+  const [token, setToken] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [name, setName] = useState('')
-  const [token, setToken] = useState('')
-  const [adding, setAdding] = useState(false)
+  const [githubToken, setGithubToken] = useState('')
+  const [organization, setOrganization] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [removing, setRemoving] = useState(false)
+
+  const isAdmin = !!user?.is_admin
 
   async function load() {
     setLoading(true)
     setError('')
     try {
-      const data = await api.listTokens()
-      setTokens(data)
-      const active = data.find((t) => t.is_active)
-      if (active) onActiveChange?.(active)
+      const data = await api.getToken()
+      setToken(data)
+      if (data) {
+        onActiveChange?.(data)
+        setName(data.name || '')
+        setOrganization(data.organization || '')
+      } else {
+        onActiveChange?.(null)
+      }
     } catch (e) {
       setError(apiError(e))
     } finally {
@@ -29,119 +38,167 @@ export default function TokenManager({ onActiveChange }) {
     load()
   }, [])
 
-  async function add(e) {
+  async function save(e) {
     e.preventDefault()
-    setAdding(true)
+    setSaving(true)
     setError('')
     try {
-      await api.addToken(name.trim(), token.trim())
-      setName('')
-      setToken('')
-      await load()
+      const saved = await api.setToken(name.trim(), githubToken.trim(), organization.trim())
+      setGithubToken('')
+      setToken(saved)
+      onActiveChange?.(saved)
+      setName(saved.name || name.trim())
+      setOrganization(saved.organization || organization.trim())
     } catch (e) {
       setError(apiError(e))
     } finally {
-      setAdding(false)
+      setSaving(false)
     }
   }
 
-  async function activate(id) {
+  async function remove() {
+    if (!confirm('Remove the configured GitHub token? Deployments and repo listing will stop working until a new one is set.')) return
+    setRemoving(true)
+    setError('')
     try {
-      const updated = await api.activateToken(id)
-      await load()
-      onActiveChange?.(updated)
+      await api.deleteToken()
+      setToken(null)
+      setName('')
+      setOrganization('')
+      onActiveChange?.(null)
     } catch (e) {
       setError(apiError(e))
+    } finally {
+      setRemoving(false)
     }
   }
 
-  async function remove(id) {
-    if (!confirm('Delete this token? Its deployment history remains but statuses can no longer be refreshed.')) return
-    try {
-      await api.deleteToken(id)
-      await load()
-    } catch (e) {
-      setError(apiError(e))
-    }
-  }
+  const title = token
+    ? 'GitHub token — configured'
+    : 'GitHub token — not configured yet'
 
   return (
     <Card
-      title="GitHub Tokens (fine-grained PATs)"
+      title={title}
       right={
-        tokens.length > 0 && (
-          <Badge color={tokens.some((t) => t.is_active) ? 'green' : 'amber'}>
-            {tokens.some((t) => t.is_active) ? '1 active' : 'none active'}
-          </Badge>
+        token ? (
+          <Badge color="green">active</Badge>
+        ) : (
+          <Badge color="amber">none</Badge>
         )
       }
     >
       <ErrorBanner message={error} />
-      <form onSubmit={add} className="mt-2 flex flex-wrap items-end gap-2">
-        <label className="flex flex-col text-xs text-slate-400">
-          Name
-          <input
-            className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. work-github"
-            required
-          />
-        </label>
-        <label className="flex flex-1 min-w-[220px] flex-col text-xs text-slate-400">
-          Token
-          <input
-            className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100 font-mono"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="github_pat_..."
-            type="password"
-            required
-          />
-        </label>
-        <Button type="submit" disabled={adding}>
-          {adding ? 'Adding…' : 'Add token'}
-        </Button>
-      </form>
 
-      <div className="mt-4 space-y-2">
-        {loading ? (
-          <Spinner label="Loading tokens…" />
-        ) : tokens.length === 0 ? (
-          <Empty text="No tokens yet. Add one above (repo + Actions read/write permissions)." />
-        ) : (
-          tokens.map((t) => (
-            <div
-              key={t.id}
-              className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-900/40 px-3 py-2"
-            >
+      {loading ? (
+        <Spinner label="Loading token…" />
+      ) : token ? (
+        <div className="space-y-2">
+          <div className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-2">
+            <div className="flex items-center justify-between">
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{t.name}</span>
-                  <Badge color={t.is_active ? 'green' : 'slate'}>{t.is_active ? 'ACTIVE' : 'idle'}</Badge>
-                </div>
+                <div className="font-medium">{token.name}</div>
                 <div className="text-xs text-slate-500">
-                  {t.label} · scopes: {t.scopes || '(fine-grained)'} · added {new Date(t.created_at).toLocaleString()}
+                  {token.label}
+                  {token.organization ? ` · org: ${token.organization}` : ''}
+                  {' · scopes: '}
+                  {token.scopes || '(fine-grained)'}
+                  {' · added '}
+                  {new Date(token.created_at).toLocaleString()}
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {!t.is_active && (
-                  <Button size="sm" variant="secondary" onClick={() => activate(t.id)}>
-                    Activate
-                  </Button>
-                )}
-                <Button size="sm" variant="ghost" onClick={() => remove(t.id)}>
-                  Delete
+              {isAdmin && (
+                <Button size="sm" variant="ghost" onClick={remove} disabled={removing}>
+                  {removing ? 'Removing…' : 'Delete'}
                 </Button>
-              </div>
+              )}
             </div>
-          ))
-        )}
-        <p className="text-xs text-slate-500 pt-1">
-          Tip: fine-grained PATs need <code>Contents: Read/Write</code>, <code>Actions: Write</code>, and{' '}
-          <code>Pull requests: Write</code> on the repos you want to merge+deploy.
-        </p>
-      </div>
+          </div>
+          {isAdmin && (
+            <details className="text-xs text-slate-400">
+              <summary className="cursor-pointer">Replace token / change organization</summary>
+              <form onSubmit={save} className="mt-2 flex flex-wrap items-end gap-2">
+                <label className="flex flex-col text-xs text-slate-400">
+                  Name
+                  <input
+                    className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="e.g. work-github"
+                    required
+                  />
+                </label>
+                <label className="flex flex-col text-xs text-slate-400">
+                  Organization
+                  <input
+                    className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100"
+                    value={organization}
+                    onChange={(e) => setOrganization(e.target.value)}
+                    placeholder="my-org (repos will be filtered to this org)"
+                  />
+                </label>
+                <label className="flex flex-1 min-w-[220px] flex-col text-xs text-slate-400">
+                  Token
+                  <input
+                    className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100 font-mono"
+                    value={githubToken}
+                    onChange={(e) => setGithubToken(e.target.value)}
+                    placeholder="github_pat_…"
+                    type="password"
+                    required
+                  />
+                </label>
+                <Button type="submit" disabled={saving}>
+                  {saving ? 'Saving…' : 'Replace token'}
+                </Button>
+              </form>
+            </details>
+          )}
+        </div>
+      ) : isAdmin ? (
+        <form onSubmit={save} className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col text-xs text-slate-400">
+            Name
+            <input
+              className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. work-github"
+              required
+            />
+          </label>
+          <label className="flex flex-col text-xs text-slate-400">
+            Organization
+            <input
+              className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100"
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
+              placeholder="my-org (repos will be filtered to this org)"
+            />
+          </label>
+          <label className="flex flex-1 min-w-[220px] flex-col text-xs text-slate-400">
+            Token
+            <input
+              className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100 font-mono"
+              value={githubToken}
+              onChange={(e) => setGithubToken(e.target.value)}
+              placeholder="github_pat_…"
+              type="password"
+              required
+            />
+          </label>
+          <Button type="submit" disabled={saving}>
+            {saving ? 'Saving…' : 'Save token'}
+          </Button>
+        </form>
+      ) : (
+        <Empty text="No GitHub token configured. Ask an admin to add one in the Configure tab." />
+      )}
+
+      <p className="mt-4 text-xs text-slate-500">
+        Tip: fine-grained PATs need <code>Contents: Read/Write</code>, <code>Actions: Write</code>, and{' '}
+        <code>Pull requests: Write</code> on the repos you want to merge+deploy.
+      </p>
     </Card>
   )
 }

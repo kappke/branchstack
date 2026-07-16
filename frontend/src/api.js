@@ -47,6 +47,46 @@ export function apiError(err) {
   )
 }
 
+// favorites are stored locally in the browser (per-user-ish, not on the server)
+const FAVORITES_KEY = 'branchstack_favorites'
+
+function readFavorites() {
+  try {
+    const raw = localStorage.getItem(FAVORITES_KEY)
+    if (!raw) return []
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
+
+function writeFavorites(arr) {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(arr))
+}
+
+export const favoritesStore = {
+  list() {
+    return readFavorites().map((name) => ({ repo_full_name: name }))
+  },
+  add(repo_full_name) {
+    const set = new Set(readFavorites())
+    set.add(repo_full_name)
+    const arr = [...set].sort()
+    writeFavorites(arr)
+    return { repo_full_name: repo_full_name }
+  },
+  remove(repo_full_name) {
+    const arr = readFavorites().filter((n) => n !== repo_full_name)
+    writeFavorites(arr)
+  },
+  toggle(repo_full_name, currentlyFav) {
+    if (currentlyFav) this.remove(repo_full_name)
+    else this.add(repo_full_name)
+    return !currentlyFav
+  },
+}
+
 export const api = {
   // auth
   login: (username, password) =>
@@ -63,18 +103,11 @@ export const api = {
   listUsers: () => http.get('/users').then((r) => r.data),
   addUser: (username, password) => http.post('/users', { username, password }).then((r) => r.data),
 
-  // favorites (per user)
-  listFavorites: () => http.get('/favorites').then((r) => r.data),
-  addFavorite: (repo_full_name) =>
-    http.post('/favorites', { repo_full_name }).then((r) => r.data),
-  removeFavorite: (repo_full_name) =>
-    http.delete(`/favorites/${encodeURIComponent(repo_full_name)}`, { validateStatus: () => true }),
-
-  // tokens
-  listTokens: () => http.get('/tokens').then((r) => r.data),
-  addToken: (name, token) => http.post('/tokens', { name, token }).then((r) => r.data),
-  activateToken: (id) => http.post(`/tokens/${id}/activate`).then((r) => r.data),
-  deleteToken: (id) => http.delete(`/tokens/${id}`),
+  // tokens — single global token (admin writes, all read)
+  getToken: () => http.get('/tokens').then((r) => r.data),
+  setToken: (name, token, organization) =>
+    http.post('/tokens', { name, token, organization }).then((r) => r.data),
+  deleteToken: () => http.delete('/tokens'),
 
   // repos (cached server-side; pass refresh=true to bypass cache)
   listRepos: (refresh = false) => http.get('/repos', { params: refresh ? { refresh: true } : {} }).then((r) => r.data),

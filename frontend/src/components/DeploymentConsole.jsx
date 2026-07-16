@@ -1,10 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { api, apiError } from "../api";
+import { api, apiError, favoritesStore } from "../api";
 import { Badge, Button, Card, Empty, ErrorBanner, Spinner } from "./ui";
 
-function RepoPicker({ repos, repo, onSelect, favorites, favOnly, onFavOnlyChange, onToggleFav }) {
+function RepoPicker({
+  repos,
+  repo,
+  onSelect,
+  favorites,
+  favOnly,
+  onFavOnlyChange,
+  onToggleFav,
+}) {
   const [q, setQ] = useState("");
-  const favSet = useMemo(() => new Set((favorites || []).map((f) => f.repo_full_name)), [favorites]);
+  const favSet = useMemo(
+    () => new Set((favorites || []).map((f) => f.repo_full_name)),
+    [favorites],
+  );
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     let out = repos;
@@ -33,7 +44,11 @@ function RepoPicker({ repos, repo, onSelect, favorites, favOnly, onFavOnlyChange
       </div>
       <div className="mt-2 max-h-64 overflow-auto rounded border border-slate-800">
         {filtered.length === 0 ? (
-          <Empty text={favOnly ? "No favorite repositories." : "No repositories match."} />
+          <Empty
+            text={
+              favOnly ? "No favorite repositories." : "No repositories match."
+            }
+          />
         ) : (
           filtered.map((r) => {
             const isFav = favSet.has(r.full_name);
@@ -42,7 +57,10 @@ function RepoPicker({ repos, repo, onSelect, favorites, favOnly, onFavOnlyChange
                 key={r.id}
                 className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-slate-800 ${repo?.id === r.id ? "bg-indigo-900/30 ring-1 ring-indigo-700" : ""}`}
               >
-                <button className="flex flex-1 items-center gap-2 text-left" onClick={() => onSelect(r)}>
+                <button
+                  className="flex flex-1 items-center gap-2 text-left"
+                  onClick={() => onSelect(r)}
+                >
                   <span
                     role="button"
                     title={isFav ? "Remove from favorites" : "Add to favorites"}
@@ -58,7 +76,9 @@ function RepoPicker({ repos, repo, onSelect, favorites, favOnly, onFavOnlyChange
                 </button>
                 <span className="flex items-center gap-2 text-xs text-slate-400">
                   {r.private && <Badge color="amber">private</Badge>}
-                  <span className="text-slate-500">default: {r.default_branch}</span>
+                  <span className="text-slate-500">
+                    default: {r.default_branch}
+                  </span>
                 </span>
               </div>
             );
@@ -81,12 +101,12 @@ function BranchMultiSelect({
     const term = q.trim().toLowerCase();
     const matched = term
       ? branches.filter((b) => {
-          const haystack = [b.name, b.commit_message, b.author]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase();
-          return haystack.includes(term);
-        })
+        const haystack = [b.name, b.commit_message, b.author]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(term);
+      })
       : branches;
     return [...matched].sort((a, b) => {
       const ta = a.commit_date ? new Date(a.commit_date).getTime() : 0;
@@ -97,13 +117,13 @@ function BranchMultiSelect({
 
   return (
     <div>
-      <div className="mb-2 flex items-start gap-3 text-xs text-slate-400">
-        <label className="flex flex-col items-center gap-1.5">
+      <div className="mb-2 flex items-center gap-3 text-xs text-slate-400">
+        <label className="flex flex-col items-start gap-1.5">
           Base branch:
           <select
             value={base}
             onChange={(e) => onBase(e.target.value)}
-            className="rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm text-slate-100"
+            className="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm text-slate-100"
           >
             {branches.map((b) => (
               <option key={b.name} value={b.name}>
@@ -189,20 +209,7 @@ function WorkflowPicker({
         <p className="mt-2 text-xs text-slate-500">Loading inputs…</p>
       )}
       {inputs && inputs.length > 0 && (
-        <ul className="mt-3 space-y-1 text-xs text-slate-400">
-          {inputs.map((i) => (
-            <li key={i.name} className="flex justify-between gap-2">
-              <span className="font-mono text-slate-300">
-                {i.name}
-                {i.required ? " *" : ""}
-              </span>
-              <span>
-                {i.type}
-                {i.options ? ` (${i.options.join("|")})` : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <p className="mt-2 text-xs text-slate-500">Inputs loaded</p>
       )}
       {inputs && inputs.length === 0 && (
         <p className="mt-2 text-xs text-slate-500">
@@ -326,10 +333,9 @@ export default function DeploymentConsole({
   const [wfInputs, setWfInputs] = useState([]);
   const [inputsLoading, setInputsLoading] = useState(false);
   const [inputValues, setInputValues] = useState({});
-  const [envName, setEnvName] = useState("staging");
   const [tempBranch, setTempBranch] = useState("");
 
-  const [favorites, setFavorites] = useState([]);
+  const [favorites, setFavorites] = useState(() => favoritesStore.list());
   const [favOnly, setFavOnly] = useState(false);
 
   const [loadingRepos, setLoadingRepos] = useState(false);
@@ -339,30 +345,9 @@ export default function DeploymentConsole({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  async function loadFavorites() {
-    try {
-      setFavorites(await api.listFavorites());
-    } catch {
-      /* favorites are non-critical */
-    }
-  }
-
-  async function toggleFav(fullName, currentlyFav) {
-    try {
-      if (currentlyFav) {
-        await api.removeFavorite(fullName);
-        setFavorites((f) => f.filter((x) => x.repo_full_name !== fullName));
-      } else {
-        const added = await api.addFavorite(fullName);
-        setFavorites((f) =>
-          f.some((x) => x.repo_full_name === fullName)
-            ? f
-            : [...f, added],
-        );
-      }
-    } catch (e) {
-      setError(apiError(e));
-    }
+  function toggleFav(fullName, currentlyFav) {
+    favoritesStore.toggle(fullName, currentlyFav);
+    setFavorites(favoritesStore.list());
   }
 
   async function loadRepos(refresh = false) {
@@ -380,10 +365,6 @@ export default function DeploymentConsole({
   useEffect(() => {
     if (activeTokenId !== undefined) loadRepos();
   }, [activeTokenId]);
-
-  useEffect(() => {
-    loadFavorites();
-  }, []);
 
   async function pickRepo(r) {
     setRepo(r);
@@ -490,7 +471,6 @@ export default function DeploymentConsole({
         workflow_id: String(wf.id),
         workflow_name: wf.name,
         inputs: inputValues,
-        environment: envName,
       });
       setDeployResult(result);
       setTempBranch(result.temp_branch);
@@ -608,28 +588,13 @@ export default function DeploymentConsole({
           <Empty text="Select a repository first." />
         ) : (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <WorkflowPicker
-                workflows={workflows}
-                workflowPath={workflowPath}
-                onPick={pickWorkflow}
-                inputs={wfInputs}
-                inputsLoading={inputsLoading}
-              />
-              <label className="flex flex-col text-xs text-slate-400">
-                Target environment
-                <select
-                  className="mt-1 rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-sm text-slate-100"
-                  value={envName}
-                  onChange={(e) => setEnvName(e.target.value)}
-                >
-                  <option>staging</option>
-                  <option>production</option>
-                  <option>dev</option>
-                  <option>qa</option>
-                </select>
-              </label>
-            </div>
+            <WorkflowPicker
+              workflows={workflows}
+              workflowPath={workflowPath}
+              onPick={pickWorkflow}
+              inputs={wfInputs}
+              inputsLoading={inputsLoading}
+            />
 
             <div className="mt-4">
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -663,8 +628,7 @@ export default function DeploymentConsole({
             <code>{selected.join(", ") || "—"}</code>
           </div>
           <div>
-            Workflow: <code>{workflowPath || "—"}</code> · Environment:{" "}
-            <code>{envName}</code>
+            Workflow: <code>{workflowPath || "—"}</code>
           </div>
           {deployResult && (
             <div>

@@ -1,44 +1,44 @@
-import React, { useEffect, useState } from 'react'
-import { api, apiError } from '../api'
-import { Badge, Button, Card, Empty, ErrorBanner, Spinner } from './ui'
+import React, { useEffect, useState } from "react";
+import { api, apiError } from "../api";
+import { Badge, Button, Card, Empty, ErrorBanner, Spinner } from "./ui";
 
 export default function UserManager() {
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [adding, setAdding] = useState(false)
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [adding, setAdding] = useState(false);
 
   async function load() {
-    setLoading(true)
-    setError('')
+    setLoading(true);
+    setError("");
     try {
-      setUsers(await api.listUsers())
+      setUsers(await api.listUsers());
     } catch (e) {
-      setError(apiError(e))
+      setError(apiError(e));
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    load()
-  }, [])
+    load();
+  }, []);
 
   async function add(e) {
-    e.preventDefault()
-    setAdding(true)
-    setError('')
+    e.preventDefault();
+    setAdding(true);
+    setError("");
     try {
-      await api.addUser(username.trim(), password)
-      setUsername('')
-      setPassword('')
-      await load()
+      await api.addUser(username.trim(), password);
+      setUsername("");
+      setPassword("");
+      await load();
     } catch (e) {
-      setError(apiError(e))
+      setError(apiError(e));
     } finally {
-      setAdding(false)
+      setAdding(false);
     }
   }
 
@@ -46,7 +46,9 @@ export default function UserManager() {
     <Card
       title="Users"
       right={
-        users.length > 0 ? <Badge color="slate">{users.length} total</Badge> : null
+        users.length > 0 ? (
+          <Badge color="slate">{users.length} total</Badge>
+        ) : null
       }
     >
       <ErrorBanner message={error} />
@@ -73,7 +75,7 @@ export default function UserManager() {
           />
         </label>
         <Button type="submit" disabled={adding}>
-          {adding ? 'Adding…' : 'Add user'}
+          {adding ? "Adding…" : "Add user"}
         </Button>
       </form>
 
@@ -97,11 +99,7 @@ export default function UserManager() {
             </div>
           ))
         )}
-        <p className="text-xs text-slate-500 pt-1">
-          Adding users here is the only way to register new accounts — there is
-          no public sign-up.
-        </p>
       </div>
     </Card>
-  )
+  );
 }

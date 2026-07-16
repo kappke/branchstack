@@ -92,7 +92,7 @@ def merge_branches(owner: str, repo: str, payload: MergeRequest, user: User = De
     if not payload.branches:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Select at least one branch")
 
-    client, token = get_active_client(user_id=user.id)
+    client, token = get_active_client()
     try:
         gh: GitHubClient = client
         result = _do_merge(gh, owner, repo, payload)
@@ -110,7 +110,6 @@ class DispatchBody(BaseModel):
     workflow_name: str | None = None
     ref: str  # usually the temp branch
     inputs: dict = {}
-    environment: str | None = None
     selected_branches: list[str] = []
     base_branch: str | None = None
 
@@ -159,7 +158,6 @@ def _record_deployment(db: Session, user_id: int, token_id: int, owner: str, rep
         run_id=run_id,
         html_url=html_url,
         status=run_status,
-        environment=body.environment,
         message="Dispatched",
     )
     db.add(dep)
@@ -171,7 +169,7 @@ def _record_deployment(db: Session, user_id: int, token_id: int, owner: str, rep
 @router.post("/api/repos/{owner}/{repo}/dispatch", response_model=DeploymentOut)
 def dispatch_workflow(owner: str, repo: str, body: DispatchBody, user: User = Depends(get_current_user),
                       db: Session = Depends(get_db)):
-    client, token = get_active_client(user_id=user.id)
+    client, token = get_active_client()
     try:
         gh: GitHubClient = client
         run_id, html_url, run_status = _do_dispatch(gh, owner, repo, body)
@@ -191,7 +189,6 @@ class OneClickDeployBody(BaseModel):
     workflow_id: str
     workflow_name: Optional[str] = None
     inputs: dict = {}
-    environment: Optional[str] = None
 
 
 class OneClickDeployResponse(BaseModel):
@@ -208,7 +205,7 @@ def deploy_one_click(owner: str, repo: str, body: OneClickDeployBody, user: User
     if not body.workflow_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Workflow is required")
 
-    client, token = get_active_client(user_id=user.id)
+    client, token = get_active_client()
     try:
         gh: GitHubClient = client
         merge_result = _do_merge(gh, owner, repo, MergeRequest(
@@ -221,7 +218,6 @@ def deploy_one_click(owner: str, repo: str, body: OneClickDeployBody, user: User
             workflow_name=body.workflow_name,
             ref=merge_result.temp_branch,
             inputs=body.inputs,
-            environment=body.environment,
             selected_branches=body.branches,
             base_branch=body.base_branch,
         )
@@ -260,7 +256,7 @@ def refresh_status(dep_id: int, user: User = Depends(get_current_user), db: Sess
     if not dep.run_id:
         return dep
     owner, repo = _split(dep.repo_full_name)
-    client, _ = get_active_client(token_id=dep.token_id, user_id=user.id)
+    client, _ = get_active_client(token_id=dep.token_id)
     try:
         run = client.get_run(owner, repo, dep.run_id)
     except GitHubError as e:
@@ -286,7 +282,7 @@ def cleanup_branch(dep_id: int, user: User = Depends(get_current_user), db: Sess
     dep = _check_ownership(db.get(Deployment, dep_id), user)
     if dep.temp_branch.startswith("branchstack/"):
         owner, repo = _split(dep.repo_full_name)
-        client, _ = get_active_client(token_id=dep.token_id, user_id=user.id)
+        client, _ = get_active_client(token_id=dep.token_id)
         try:
             client.delete_branch(owner, repo, dep.temp_branch)
         except GitHubError as e:
