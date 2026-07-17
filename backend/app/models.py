@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -54,7 +55,7 @@ class Deployment(Base):
     workflow_id = Column(String, nullable=True)  # GitHub workflow id or filename
     workflow_name = Column(String, nullable=True)
     inputs = Column(Text, nullable=True)  # JSON object
-    run_id = Column(Integer, nullable=True)  # GitHub Actions run id after dispatch
+    run_id = Column(BigInteger, nullable=True)  # GitHub Actions run id after dispatch
     html_url = Column(String, nullable=True)
     status = Column(String, nullable=True)  # queued/in_progress/completed/failed
     message = Column(Text, nullable=True)

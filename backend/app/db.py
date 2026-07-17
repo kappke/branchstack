@@ -54,6 +54,18 @@ def _migrate() -> None:
             dcols = {c["name"] for c in insp.get_columns("deployments")}
             if "user_id" not in dcols:
                 conn.execute(text("ALTER TABLE deployments ADD COLUMN user_id INTEGER"))
+            for c in insp.get_columns("deployments"):
+                if (
+                    c["name"] == "run_id"
+                    and str(c["type"]).upper().startswith("INTEGER")
+                    and not settings.database_url.startswith("sqlite")
+                ):
+                    conn.execute(
+                        text(
+                            "ALTER TABLE deployments ALTER COLUMN run_id TYPE BIGINT "
+                            "USING run_id::bigint"
+                        )
+                    )
 
 
 def _bootstrap_admin() -> None:
