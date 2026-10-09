@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,7 +22,10 @@ class TokenOut(BaseModel):
 
 
 class MergeRequest(BaseModel):
-    base_branch: str = Field(default="main", description="Branch to branch the temp branch off")
+    base_branch: str = Field(default="main", description="Branch or tag to branch the temp branch off")
+    base_ref_type: Literal["branch", "tag"] = Field(
+        default="branch", description="Whether the base ref is a branch or tag"
+    )
     branches: list[str] = Field(description="Branches to merge into the temp branch, in order")
     temp_branch: Optional[str] = Field(default=None, description="Optional explicit temp branch name")
     token_id: Optional[int] = None

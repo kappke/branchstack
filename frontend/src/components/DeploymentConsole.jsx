@@ -91,7 +91,9 @@ function RepoPicker({
 
 function BranchMultiSelect({
   branches,
+  tags,
   base,
+  baseRefType,
   onBase,
   selected,
   onToggleSelected,
@@ -119,17 +121,34 @@ function BranchMultiSelect({
     <div>
       <div className="mb-2 flex items-center gap-3 text-xs text-slate-400">
         <label className="flex flex-col items-start gap-1.5">
-          Base branch:
+          Base branch or tag:
           <select
-            value={base}
-            onChange={(e) => onBase(e.target.value)}
+            value={`${baseRefType}:${base}`}
+            onChange={(e) => {
+              const separator = e.target.value.indexOf(":");
+              onBase(
+                e.target.value.slice(0, separator),
+                e.target.value.slice(separator + 1),
+              );
+            }}
             className="w-full rounded bg-slate-800 border border-slate-700 px-2 py-1 text-sm text-slate-100"
           >
-            {branches.map((b) => (
-              <option key={b.name} value={b.name}>
-                {b.name}
-              </option>
-            ))}
+            <optgroup label="Branches">
+              {branches.map((b) => (
+                <option key={b.name} value={`branch:${b.name}`}>
+                  {b.name}
+                </option>
+              ))}
+            </optgroup>
+            {tags.length > 0 && (
+              <optgroup label="Tags">
+                {tags.map((tag) => (
+                  <option key={tag.name} value={`tag:${tag.name}`}>
+                    {tag.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
       </div>
@@ -148,7 +167,7 @@ function BranchMultiSelect({
         ) : (
           filtered.map((b) => {
             const checked = selected.includes(b.name);
-            const isBase = b.name === base;
+            const isBase = baseRefType === "branch" && b.name === base;
             return (
               <label
                 key={b.name}
@@ -326,7 +345,9 @@ export default function DeploymentConsole({
   const [repos, setRepos] = useState([]);
   const [repo, setRepo] = useState(null);
   const [branches, setBranches] = useState([]);
+  const [tags, setTags] = useState([]);
   const [base, setBase] = useState("");
+  const [baseRefType, setBaseRefType] = useState("branch");
   const [selected, setSelected] = useState([]);
   const [workflows, setWorkflows] = useState([]);
   const [workflowPath, setWorkflowPath] = useState("");
@@ -370,6 +391,7 @@ export default function DeploymentConsole({
     setRepo(r);
     setSelected([]);
     setBranches([]);
+    setTags([]);
     setWorkflows([]);
     setWorkflowPath("");
     setWfInputs([]);
@@ -379,13 +401,16 @@ export default function DeploymentConsole({
     setMessage("");
     setLoadingBranches(true);
     const [owner, rname] = r.full_name.split("/");
+    setBaseRefType("branch");
     setBase(r.default_branch || "main");
     try {
-      const [bs, wfs] = await Promise.all([
+      const [bs, ts, wfs] = await Promise.all([
         api.listBranches(owner, rname),
+        api.listTags(owner, rname),
         api.listWorkflows(owner, rname).catch(() => []),
       ]);
       setBranches(bs);
+      setTags(ts);
       setWorkflows(wfs);
       if (bs.length && !bs.some((b) => b.name === r.default_branch))
         setBase(bs[0].name);
@@ -407,11 +432,24 @@ export default function DeploymentConsole({
     const [owner, rname] = repo.full_name.split("/");
     setLoadingBranches(true);
     try {
-      setBranches(await api.listBranches(owner, rname, true));
+      const [bs, ts] = await Promise.all([
+        api.listBranches(owner, rname, true),
+        api.listTags(owner, rname, true),
+      ]);
+      setBranches(bs);
+      setTags(ts);
     } catch (e) {
       setError(apiError(e));
     } finally {
       setLoadingBranches(false);
+    }
+  }
+
+  function selectBase(type, name) {
+    setBaseRefType(type);
+    setBase(name);
+    if (type === "branch") {
+      setSelected((current) => current.filter((branch) => branch !== name));
     }
   }
 
@@ -466,6 +504,7 @@ export default function DeploymentConsole({
       const wf = workflows.find((w) => w.path === workflowPath);
       const result = await api.deploy(owner, rname, {
         base_branch: base,
+        base_ref_type: baseRefType,
         branches: selected,
         temp_branch: tempBranch || null,
         workflow_id: String(wf.id),
@@ -562,8 +601,10 @@ export default function DeploymentConsole({
         ) : (
           <BranchMultiSelect
             branches={branches}
+            tags={tags}
             base={base}
-            onBase={setBase}
+            baseRefType={baseRefType}
+            onBase={selectBase}
             selected={selected}
             onToggleSelected={toggleSelected}
           />
@@ -624,7 +665,8 @@ export default function DeploymentConsole({
             Repo: <span className="font-medium">{repo?.full_name ?? "—"}</span>
           </div>
           <div>
-            Base: <code>{base || "—"}</code> · Branches:{" "}
+            Base: <code>{base ? `${baseRefType}: ${base}` : "—"}</code> ·
+            Branches:{" "}
             <code>{selected.join(", ") || "—"}</code>
           </div>
           <div>

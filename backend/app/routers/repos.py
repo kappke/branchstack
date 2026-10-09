@@ -96,6 +96,38 @@ def list_branches(owner: str, repo: str, refresh: bool = False, user: User = Dep
         client.close()
 
 
+def _tags_key(owner: str, repo: str) -> tuple:
+    return ("tags", owner, repo)
+
+
+def _list_tags_cached(token_id: int, owner: str, repo: str, refresh: bool) -> list[dict]:
+    cache = get_cache(token_id)
+    key = _tags_key(owner, repo)
+
+    def factory() -> list[dict]:
+        client, _ = get_active_client(token_id=token_id)
+        try:
+            with client as gh:
+                return gh.list_tags(owner, repo)
+        finally:
+            client.close()
+
+    if refresh:
+        value = factory()
+        cache.set(key, value)
+        return value
+    return cache.get_or_set(key, factory)
+
+
+@router.get("/{owner}/{repo}/tags")
+def list_tags(owner: str, repo: str, refresh: bool = False, user: User = Depends(get_current_user)):
+    client, token = get_active_client()
+    try:
+        return _list_tags_cached(token.id, owner, repo, refresh)
+    finally:
+        client.close()
+
+
 def _workflows_key(owner: str, repo: str) -> tuple:
     return ("workflows", owner, repo)
 

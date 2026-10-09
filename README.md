@@ -18,8 +18,8 @@ re-check run status and clean up temp branches later.
 1. Add a fine-grained PAT in the UI (the backend validates it against `/user`).
 2. Activate a token.
 3. Pick a repository → its branches and workflows load.
-4. Choose the **base branch** (the temp branch is cut from it) and tick the
-   **branches to merge**.
+4. Choose the **base branch or tag** (the temp branch is cut from it) and tick
+   the **branches to merge**.
 5. Click **Create temp branch & merge selected**. The backend creates a
    `branchstack/_merge-…` ref off the base and merges each selected branch into
    it via the GitHub Merge API (conflicts are reported; the temp branch is
@@ -129,10 +129,11 @@ DELETE /api/tokens/{id}
 
 GET    /api/repos
 GET    /api/repos/{owner}/{repo}/branches
+GET    /api/repos/{owner}/{repo}/tags
 GET    /api/repos/{owner}/{repo}/workflows
 GET    /api/repos/{owner}/{repo}/workflows/{path}/inputs
 
-POST   /api/repos/{owner}/{repo}/merge   { base_branch, branches[], temp_branch? }
+POST   /api/repos/{owner}/{repo}/merge   { base_branch, base_ref_type?, branches[], temp_branch? }
 POST   /api/repos/{owner}/{repo}/dispatch { workflow_id, ref, inputs{}, environment?,
                                             selected_branches[], base_branch? }
 
@@ -140,6 +141,8 @@ GET    /api/deployments
 POST   /api/deployments/{id}/refresh
 DELETE /api/deployments/{id}/branch
 ```
+
+`base_ref_type` accepts `branch` (default) or `tag` for merge/deploy requests.
 
 ## Notes
 

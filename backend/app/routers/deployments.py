@@ -1,7 +1,7 @@
 import json
 import secrets
 import time
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -54,7 +54,8 @@ class MergeResult(BaseModel):
 
 
 def _do_merge(gh: GitHubClient, owner: str, repo: str, payload: MergeRequest) -> MergeResult:
-    ref = gh.get_ref(owner, repo, payload.base_branch)
+    ref_type = "tags" if payload.base_ref_type == "tag" else "heads"
+    ref = gh.get_ref(owner, repo, payload.base_branch, ref_type=ref_type)
     base_sha = ref["object"]["sha"]
 
     temp_branch = _temp_branch_name(payload.temp_branch, payload.base_branch)
@@ -184,6 +185,7 @@ def dispatch_workflow(owner: str, repo: str, body: DispatchBody, user: User = De
 
 class OneClickDeployBody(BaseModel):
     base_branch: str = "main"
+    base_ref_type: Literal["branch", "tag"] = "branch"
     branches: list[str]
     temp_branch: Optional[str] = None
     workflow_id: str
@@ -210,6 +212,7 @@ def deploy_one_click(owner: str, repo: str, body: OneClickDeployBody, user: User
         gh: GitHubClient = client
         merge_result = _do_merge(gh, owner, repo, MergeRequest(
             base_branch=body.base_branch,
+            base_ref_type=body.base_ref_type,
             branches=body.branches,
             temp_branch=body.temp_branch,
         ))

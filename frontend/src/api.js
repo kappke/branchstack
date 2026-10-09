@@ -113,6 +113,8 @@ export const api = {
   listRepos: (refresh = false) => http.get('/repos', { params: refresh ? { refresh: true } : {} }).then((r) => r.data),
   listBranches: (owner, repo, refresh = false) =>
     http.get(`/repos/${owner}/${repo}/branches`, { params: refresh ? { refresh: true } : {} }).then((r) => r.data),
+  listTags: (owner, repo, refresh = false) =>
+    http.get(`/repos/${owner}/${repo}/tags`, { params: refresh ? { refresh: true } : {} }).then((r) => r.data),
   listWorkflows: (owner, repo, refresh = false) =>
     http.get(`/repos/${owner}/${repo}/workflows`, { params: refresh ? { refresh: true } : {} }).then((r) => r.data),
   workflowInputs: (owner, repo, path, refresh = false) =>

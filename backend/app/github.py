@@ -158,9 +158,44 @@ class GitHubClient:
         r = self._request("GET", f"/repos/{owner}/{repo}/branches/{branch}")
         return r.json()
 
-    def get_ref(self, owner: str, repo: str, branch: str) -> dict:
-        r = self._request("GET", f"/repos/{owner}/{repo}/git/ref/heads/{branch}")
-        return r.json()
+    def list_tags(self, owner: str, repo: str, per_page: int = 100) -> list[dict]:
+        tags = []
+        page = 1
+        while True:
+            r = self._request("GET", f"/repos/{owner}/{repo}/tags", params={
+                "per_page": per_page,
+                "page": page,
+            })
+            chunk = r.json()
+            if not chunk:
+                break
+            tags.extend({"name": tag["name"]} for tag in chunk)
+            if len(chunk) < per_page:
+                break
+            page += 1
+        return tags
+
+    def get_ref(self, owner: str, repo: str, ref: str, ref_type: str = "heads") -> dict:
+        if ref_type not in {"heads", "tags"}:
+            raise ValueError("ref_type must be 'heads' or 'tags'")
+
+        r = self._request("GET", f"/repos/{owner}/{repo}/git/ref/{ref_type}/{ref}")
+        result = r.json()
+        target = result.get("object") or {}
+        seen = set()
+        while ref_type == "tags" and target.get("type") == "tag":
+            tag_sha = target.get("sha")
+            if not tag_sha or tag_sha in seen:
+                raise GitHubError(502, f"Could not resolve annotated tag '{ref}'")
+            seen.add(tag_sha)
+            tag = self._request("GET", f"/repos/{owner}/{repo}/git/tags/{tag_sha}").json()
+            target = tag.get("object") or {}
+
+        if ref_type == "tags" and target.get("type") != "commit":
+            raise GitHubError(422, f"Tag '{ref}' does not point to a commit")
+
+        result["object"] = target
+        return result
 
     def create_branch(self, owner: str, repo: str, new_branch: str, from_sha: str) -> dict:
         r = self._request("POST", f"/repos/{owner}/{repo}/git/refs", json={
